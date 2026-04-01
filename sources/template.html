@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920">
+<title>Ban-App — fail2ban Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg:           %%COLOR_BG%%;
+    --panel:        %%COLOR_PANEL%%;
+    --border:       %%COLOR_PANEL_BORDER%%;
+    --text:         %%COLOR_TEXT%%;
+    --muted:        %%COLOR_TEXT_MUTED%%;
+    --accent:       %%COLOR_ACCENT%%;
+    --accent2:      %%COLOR_ACCENT2%%;
+    --accent3:      %%COLOR_ACCENT3%%;
+    --success:      %%COLOR_SUCCESS%%;
+    --danger:       %%COLOR_DANGER%%;
+    --radius:       12px;
+    --font-mono:    'JetBrains Mono', monospace;
+    --font-ui:      'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 13px;
+  }
+
+  /* ── Page chrome ── */
+  #page {
+    display: flex;
+    flex-direction: column;
+    width: 1920px;
+    height: 900px;
+    padding: 10px 12px 6px;
+    gap: 8px;
+  }
+
+  /* ── Header ── */
+  #header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 36px;
+    flex-shrink: 0;
+  }
+  #header h1 {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--text);
+  }
+  #header h1 span { color: var(--accent); }
+  #header .meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  #header .meta b { color: var(--accent2); }
+
+  /* ── Grid ── */
+  #grid {
+    display: grid;
+    grid-template-columns: 25fr 75fr;
+    grid-template-rows: 26fr 74fr;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ── Panel base ── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 6px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .panel-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .panel-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .panel-dot.c2 { background: var(--accent2); }
+  .panel-dot.c3 { background: var(--accent3); }
+  .panel-dot.c4 { background: var(--success); }
+  .panel-body {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Summary table (top-left) ── */
+  #tl .panel-body {
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  table.jail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  table.jail-table thead th {
+    padding: 4px 10px;
+    text-align: right;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  table.jail-table thead th:first-child { text-align: left; }
+  table.jail-table tbody tr {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.15s;
+  }
+  table.jail-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+  table.jail-table td {
+    padding: 5px 10px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  table.jail-table td:first-child {
+    text-align: left;
+    color: var(--accent2);
+    font-weight: 600;
+  }
+  table.jail-table td.val-hi  { color: var(--danger); }
+  table.jail-table td.val-mid { color: var(--accent3); }
+  table.jail-table td.val-ok  { color: var(--success); }
+  table.jail-table tfoot tr { border-top: 1px solid var(--border); }
+  table.jail-table tfoot td {
+    padding: 5px 10px;
+    text-align: right;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  table.jail-table tfoot td:first-child {
+    text-align: left;
+    color: var(--accent);
+  }
+
+  /* ── Stacked area chart (top-right) ── */
+  #tr .panel-body { padding: 4px 8px 4px 4px; }
+  #tr canvas { width: 100% !important; height: 100% !important; }
+
+  /* ── World map (bottom-right) ── */
+  #br .panel-body { overflow: hidden; }
+  #br svg { width: 100%; height: 100%; display: block; }
+  .country { stroke: #1a1f2e; stroke-width: 0.4; cursor: default; }
+  .map-tooltip {
+    position: absolute;
+    background: rgba(13,15,18,0.92);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    pointer-events: none;
+    display: none;
+    z-index: 100;
+    white-space: nowrap;
+  }
+
+  /* ── Country list (bottom-left) ── */
+  #bl .panel-body {
+    overflow-y: auto;
+    padding: 4px 6px;
+  }
+  .country-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 6px;
+    transition: background 0.12s;
+  }
+  .country-row:hover { background: rgba(255,255,255,0.04); }
+  .country-flag { font-size: 16px; flex-shrink: 0; width: 22px; text-align: center; }
+  .country-iso  { font-family: var(--font-mono); font-size: 10px; color: var(--muted); width: 24px; flex-shrink: 0; }
+  .country-name { font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .country-bar-wrap {
+    width: 90px; flex-shrink: 0;
+    height: 8px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .country-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.3s;
+  }
+  .country-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent2);
+    width: 34px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* ── Footer ── */
+  #footer {
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+    letter-spacing: 0.04em;
+  }
+  #footer b { color: var(--accent); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div id="page">
+
+  <!-- Header -->
+  <div id="header">
+    <h1>BAN<span>·</span>APP &nbsp;<span style="font-size:13px;font-weight:400;color:var(--muted)">fail2ban monitor</span></h1>
+    <div class="meta">Last snapshot: <b id="last-ts">%%LAST_TS%%</b> &nbsp;|&nbsp; Generated: %%GENERATED_AT%%</div>
+  </div>
+
+  <!-- 4-zone grid -->
+  <div id="grid">
+
+    <!-- TOP-LEFT: Summary table -->
+    <div class="panel" id="tl">
+      <div class="panel-header">
+        <div class="panel-dot"></div>
+        <span class="panel-title">Jail Summary</span>
+      </div>
+      <div class="panel-body">
+        <table class="jail-table" id="jail-table">
+          <thead>
+            <tr>
+              <th>Jail</th>
+              <th>Fails↓</th>
+              <th>Bans↓</th>
+              <th>Fails∑</th>
+              <th>Bans∑</th>
+            </tr>
+          </thead>
+          <tbody id="jail-tbody"></tbody>
+          <tfoot id="jail-tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- TOP-RIGHT: Stacked area chart -->
+    <div class="panel" id="tr">
+      <div class="panel-header">
+        <div class="panel-dot c2"></div>
+        <span class="panel-title">Timeline — <span id="chart-field-label"></span></span>
+      </div>
+      <div class="panel-body">
+        <canvas id="area-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- BOTTOM-LEFT: Country list -->
+    <div class="panel" id="bl">
+      <div class="panel-header">
+        <div class="panel-dot c4"></div>
+        <span class="panel-title">Countries</span>
+      </div>
+      <div class="panel-body" id="country-list"></div>
+    </div>
+
+    <!-- BOTTOM-RIGHT: World map -->
+    <div class="panel" id="br">
+      <div class="panel-header">
+        <div class="panel-dot c3"></div>
+        <span class="panel-title">World Map</span>
+      </div>
+      <div class="panel-body" id="map-container">
+        <div class="map-tooltip" id="map-tooltip"></div>
+        <svg id="world-svg"></svg>
+      </div>
+    </div>
+
+  </div><!-- /grid -->
+
+  <!-- Footer -->
+  <div id="footer">%%FOOTER_HTML%%</div>
+
+</div><!-- /page -->
+
+<!-- ── Data ── -->
+<script>
+const SUMMARY       = %%SUMMARY_JSON%%;
+const SUMMARY_TOTAL = %%SUMMARY_TOTAL_JSON%%;
+const CHART_DATA    = %%CHART_DATA_JSON%%;
+const COUNTRY_DATA  = %%COUNTRY_JSON%%;
+const JAIL_COLORS   = %%JAIL_COLORS_JSON%%;
+const CFG = {
+  chartSmoothing:   %%CHART_SMOOTHING%%,
+  chartShowTotal:   %%CHART_SHOW_TOTAL%%,
+  chartFillOpacity: %%CHART_FILL_OPACITY%%,
+  maxCountry:       %%MAX_COUNTRY_DISPLAY%%,
+  mapColorLow:      "%%MAP_COLOR_LOW%%",
+  mapColorHigh:     "%%MAP_COLOR_HIGH%%",
+  mapColorZero:     "%%MAP_COLOR_ZERO%%",
+  mapColorOcean:    "%%MAP_COLOR_OCEAN%%",
+};
+const FIELD_LABELS = {
+  curr_fail:  "Current Fails",
+  curr_ban:   "Current Bans",
+  total_fail: "Total Fails",
+  total_ban:  "Total Bans",
+};
+</script>
+
+<!-- ── Chart.js ── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- ── D3 ── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<!-- ── TopoJSON ── -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+
+<script>
+// ============================================================
+//  HELPERS
+// ============================================================
+function colorVal(val, max) {
+  if (!max) return "var(--muted)";
+  const r = val / max;
+  if (r > 0.6) return "var(--danger)";
+  if (r > 0.2) return "var(--accent3)";
+  return "var(--success)";
+}
+
+function isoToFlag(iso) {
+  if (!iso || iso.length !== 2) return "🌐";
+  return String.fromCodePoint(
+    ...iso.toUpperCase().split("").map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
+  );
+}
+
+// ============================================================
+//  1. SUMMARY TABLE
+// ============================================================
+(function buildTable() {
+  const tbody = document.getElementById("jail-tbody");
+  const tfoot = document.getElementById("jail-tfoot");
+  const maxBan = Math.max(...SUMMARY.map(j => j.all_ban), 1);
+
+  SUMMARY.forEach(j => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${j.jail}</td>
+      <td class="${colorVal(j.curr_fail, maxBan)}">${j.curr_fail.toLocaleString()}</td>
+      <td class="${colorVal(j.curr_ban,  maxBan)}">${j.curr_ban.toLocaleString()}</td>
+      <td>${j.all_fail.toLocaleString()}</td>
+      <td>${j.all_ban.toLocaleString()}</td>
+    `;
+    // Override color class approach — use inline style from colorVal string
+    tbody.appendChild(tr);
+  });
+
+  tfoot.innerHTML = `<tr>
+    <td>TOTAL</td>
+    <td>${SUMMARY_TOTAL.curr_fail.toLocaleString()}</td>
+    <td>${SUMMARY_TOTAL.curr_ban.toLocaleString()}</td>
+    <td>${SUMMARY_TOTAL.all_fail.toLocaleString()}</td>
+    <td>${SUMMARY_TOTAL.all_ban.toLocaleString()}</td>
+  </tr>`;
+})();
+
+// ============================================================
+//  2. STACKED AREA CHART
+// ============================================================
+(function buildChart() {
+  document.getElementById("chart-field-label").textContent =
+    FIELD_LABELS[CHART_DATA.field] || CHART_DATA.field;
+
+  const labels = CHART_DATA.labels.map(ts => {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+  });
+
+  const datasets = CHART_DATA.jails.map((jail, i) => ({
+    label: jail,
+    data: CHART_DATA.series[jail],
+    backgroundColor: (JAIL_COLORS[i % JAIL_COLORS.length]) + "b3",
+    borderColor:     JAIL_COLORS[i % JAIL_COLORS.length],
+    borderWidth: 1.5,
+    fill: true,
+    tension: CFG.chartSmoothing ? 0.4 : 0,
+    pointRadius: 0,
+    pointHoverRadius: 4,
+  }));
+
+  if (CFG.chartShowTotal) {
+    datasets.push({
+      label: "Total",
+      data: CHART_DATA.totals,
+      backgroundColor: "transparent",
+      borderColor: "#ffffff55",
+      borderWidth: 1.5,
+      borderDash: [4, 3],
+      fill: false,
+      tension: CFG.chartSmoothing ? 0.4 : 0,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      order: -1,
+    });
+  }
+
+  const ctx = document.getElementById("area-chart").getContext("2d");
+  new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          position: "top",
+          align: "end",
+          labels: {
+            color: "#7a8499",
+            font: { family: "'JetBrains Mono'", size: 10 },
+            boxWidth: 10,
+            boxHeight: 10,
+            padding: 12,
+          }
+        },
+        tooltip: {
+          backgroundColor: "rgba(13,15,18,0.92)",
+          borderColor: "#1e2330",
+          borderWidth: 1,
+          titleColor: "#e2e8f0",
+          bodyColor: "#7a8499",
+          titleFont: { family: "'JetBrains Mono'", size: 11 },
+          bodyFont:  { family: "'JetBrains Mono'", size: 11 },
+          padding: 10,
+          callbacks: {
+            title: items => CHART_DATA.labels[items[0].dataIndex],
+          }
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: {
+            color: "#7a8499",
+            font: { family: "'JetBrains Mono'", size: 9 },
+            maxTicksLimit: 16,
+            maxRotation: 0,
+          },
+          grid: { color: "#1e2330" },
+        },
+        y: {
+          stacked: true,
+          ticks: {
+            color: "#7a8499",
+            font: { family: "'JetBrains Mono'", size: 10 },
+          },
+          grid: { color: "#1e2330" },
+        },
+      },
+    }
+  });
+})();
+
+// ============================================================
+//  3. COUNTRY LIST
+// ============================================================
+(function buildCountryList() {
+  const container = document.getElementById("country-list");
+  const sorted = Object.entries(COUNTRY_DATA)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, CFG.maxCountry);
+
+  if (!sorted.length) {
+    container.innerHTML = '<p style="padding:10px;color:var(--muted);font-size:11px">No GeoIP data available.</p>';
+    return;
+  }
+
+  const maxCount = sorted[0][1];
+
+  // Country names via Intl API
+  const getCountryName = iso => {
+    try {
+      return new Intl.DisplayNames(["en"], { type: "region" }).of(iso) || iso;
+    } catch { return iso; }
+  };
+
+  sorted.forEach(([iso, count]) => {
+    const pct = maxCount ? (count / maxCount) * 100 : 0;
+    const div = document.createElement("div");
+    div.className = "country-row";
+    div.innerHTML = `
+      <span class="country-flag">${isoToFlag(iso)}</span>
+      <span class="country-iso">${iso}</span>
+      <span class="country-name">${getCountryName(iso)}</span>
+      <div class="country-bar-wrap">
+        <div class="country-bar-fill" style="width:${pct.toFixed(1)}%"></div>
+      </div>
+      <span class="country-count">${count.toLocaleString()}</span>
+    `;
+    container.appendChild(div);
+  });
+})();
+
+// ============================================================
+//  4. WORLD MAP (D3 + TopoJSON Natural Earth)
+// ============================================================
+(function buildMap() {
+  const container = document.getElementById("map-container");
+  const svg = d3.select("#world-svg");
+  const tooltip = document.getElementById("map-tooltip");
+
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+
+  svg.attr("viewBox", `0 0 ${w} ${h}`);
+
+  const projection = d3.geoNaturalEarth1()
+    .scale(w / 6.5)
+    .translate([w / 2, h / 2]);
+
+  const path = d3.geoPath().projection(projection);
+
+  // Color scale
+  const counts = Object.values(COUNTRY_DATA);
+  const maxCount = counts.length ? Math.max(...counts) : 1;
+
+  const colorScale = d3.scaleSequential()
+    .domain([0, maxCount])
+    .interpolator(d3.interpolateRgb(CFG.mapColorLow, CFG.mapColorHigh));
+
+  const getCountryName = iso => {
+    try { return new Intl.DisplayNames(["en"], { type: "region" }).of(iso) || iso; }
+    catch { return iso; }
+  };
+
+  // Ocean background
+  svg.append("rect")
+    .attr("width", w).attr("height", h)
+    .attr("fill", CFG.mapColorOcean);
+
+  // Graticule
+  svg.append("path")
+    .datum(d3.geoGraticule()())
+    .attr("d", path)
+    .attr("fill", "none")
+    .attr("stroke", "#1a2030")
+    .attr("stroke-width", 0.3);
+
+  // Load world TopoJSON
+  d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+    .then(world => {
+      const countries = topojson.feature(world, world.objects.countries);
+
+      // ISO numeric → alpha2 lookup
+      fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+        .then(() => {}) // already loaded above
+        .catch(() => {});
+
+      // Build numeric→alpha2 map from our data keys (we use D3 + a static map)
+      const NUM_TO_A2 = getNumericToAlpha2Map();
+
+      svg.selectAll(".country")
+        .data(countries.features)
+        .join("path")
+        .attr("class", "country")
+        .attr("d", path)
+        .attr("fill", d => {
+          const iso2 = NUM_TO_A2[d.id];
+          const count = iso2 ? (COUNTRY_DATA[iso2] || 0) : 0;
+          return count > 0 ? colorScale(count) : CFG.mapColorZero;
+        })
+        .on("mousemove", (event, d) => {
+          const iso2  = NUM_TO_A2[d.id];
+          const count = iso2 ? (COUNTRY_DATA[iso2] || 0) : 0;
+          const name  = iso2 ? getCountryName(iso2) : "Unknown";
+          const rect  = container.getBoundingClientRect();
+          tooltip.style.display = "block";
+          tooltip.style.left = (event.clientX - rect.left + 12) + "px";
+          tooltip.style.top  = (event.clientY - rect.top  - 28) + "px";
+          tooltip.textContent = `${iso2 || "?"} · ${name} · ${count} hit${count !== 1 ? "s" : ""}`;
+        })
+        .on("mouseleave", () => { tooltip.style.display = "none"; });
+    })
+    .catch(err => {
+      console.error("Map load error:", err);
+      svg.append("text")
+        .attr("x", w/2).attr("y", h/2)
+        .attr("text-anchor", "middle")
+        .attr("fill", "#7a8499")
+        .attr("font-size", 13)
+        .text("Map unavailable (check network)");
+    });
+})();
+
+// ============================================================
+//  ISO numeric → Alpha-2 mapping (world-atlas IDs)
+// ============================================================
+function getNumericToAlpha2Map() {
+  // Sourced from ISO 3166-1; covers all countries in Natural Earth 110m
+  return {4:"AF",8:"AL",12:"DZ",24:"AO",32:"AR",36:"AU",40:"AT",50:"BD",56:"BE",
+64:"BT",68:"BO",76:"BR",100:"BG",104:"MM",116:"KH",120:"CM",124:"CA",140:"CF",
+144:"LK",152:"CL",156:"CN",170:"CO",178:"CG",180:"CD",188:"CR",191:"HR",192:"CU",
+196:"CY",203:"CZ",208:"DK",214:"DO",218:"EC",818:"EG",222:"SV",231:"ET",246:"FI",
+250:"FR",266:"GA",276:"DE",288:"GH",300:"GR",320:"GT",324:"GN",332:"HT",340:"HN",
+348:"HU",356:"IN",360:"ID",364:"IR",368:"IQ",372:"IE",376:"IL",380:"IT",388:"JM",
+392:"JP",400:"JO",398:"KZ",404:"KE",408:"KP",410:"KR",414:"KW",418:"LA",422:"LB",
+426:"LS",430:"LR",434:"LY",442:"LU",450:"MG",484:"MX",504:"MA",508:"MZ",516:"NA",
+524:"NP",528:"NL",540:"NC",554:"NZ",558:"NI",562:"NE",566:"NG",586:"PK",591:"PA",
+598:"PG",600:"PY",604:"PE",608:"PH",616:"PL",620:"PT",630:"PR",634:"QA",642:"RO",
+643:"RU",646:"RW",682:"SA",686:"SN",694:"SL",706:"SO",710:"ZA",728:"SS",724:"ES",
+729:"SD",752:"SE",756:"CH",760:"SY",762:"TJ",764:"TH",768:"TG",780:"TT",788:"TN",
+792:"TR",800:"UG",804:"UA",784:"AE",826:"GB",840:"US",858:"UY",860:"UZ",862:"VE",
+704:"VN",887:"YE",894:"ZM",716:"ZW",012:"DZ",031:"AZ",051:"AM",070:"BA",096:"BN",
+112:"BY",191:"HR",196:"CY",233:"EE",268:"GE",348:"HU",440:"LT",428:"LV",498:"MD",
+807:"MK",499:"ME",528:"NL",578:"NO",642:"RO",688:"RS",703:"SK",705:"SI",792:"TR"};
+}
+</script>
+</body>
+</html>
