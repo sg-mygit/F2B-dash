@@ -16,7 +16,7 @@ TEMPLATE_FILE   = "template.html"      # relative to SOURCES_DIR
 FAIL2BAN_CLIENT = "/usr/bin/fail2ban-client"
 
 # --- Data options ---
-MAX_HISTORY_POINTS  = 5000      # max timestamps to keep / display (~48h at 30min)
+MAX_HISTORY_POINTS  = 350     # max timestamps to keep / display (~48h at 30min)
 MAX_COUNTRY_DISPLAY = 30      # max countries in the country list
 
 # Field to drive both the stacked area chart AND the world map / country list.
